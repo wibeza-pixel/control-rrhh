@@ -76,6 +76,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   .field input,.field select{background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:7px 9px;border-radius:var(--radius);font-size:13px;font-family:var(--sans);min-width:0;}
   .field input:focus,.field select:focus{outline:none;border-color:var(--accent-dim);}
   .field.grow{flex:1;min-width:160px;}
+  input.grow{flex:1;min-width:0;}
   button.btn{background:var(--accent);color:var(--accent-ink);border:none;padding:8px 14px;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--sans);}
   button.btn:hover{background:#a1c34d;}
   button.btn.secondary{background:none;border:1px solid var(--line);color:var(--ink);font-weight:500;}
@@ -212,9 +213,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
               <tr class="group">
                 <th class="name-head" rowspan="2"></th>
                 <th colspan="3">Asistencia</th><th colspan="2">Anticipos</th><th colspan="1">H.E. 50%</th>
-                <th colspan="1">H.E. 100%</th><th colspan="1">Domingo</th><th colspan="1">H.E. Domingo</th><th colspan="3">Haberes</th>
+                <th colspan="1">H.E. 100%</th><th colspan="1">Domingo</th><th colspan="1">H.E. Domingo</th><th colspan="3" id="periodoHaberesGroupTh">Haberes</th>
               </tr>
-              <tr class="cols">
+              <tr class="cols" id="periodoColsRow">
                 <th>Ausenc.</th><th>Licencia</th><th>Días trab.</th><th>Anticipo</th><th>Aguinaldo</th>
                 <th>Cant.</th><th>Cant.</th><th>Cant.</th><th>Cant.</th>
                 <th>Bono desemp.</th><th>Colación</th><th>Movilización</th>
@@ -234,6 +235,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           </div>
           <div class="row" style="align-items:flex-end;">
             <button class="btn secondary" onclick="switchTab('trabajadores')">+ Agregar trabajador</button>
+            <button class="btn secondary" onclick="openBonosModal()">Bonos adicionales</button>
             <button class="btn" onclick="exportarPeriodo()">Exportar Excel de este mes</button>
           </div>
         </div>
@@ -303,9 +305,9 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <tr class="group">
               <th class="name-head" rowspan="2"></th>
               <th colspan="3">Asistencia</th><th colspan="2">Anticipos</th><th colspan="1">H.E. 50%</th>
-              <th colspan="1">H.E. 100%</th><th colspan="1">Domingo</th><th colspan="1">H.E. Domingo</th><th colspan="3">Haberes</th>
+              <th colspan="1">H.E. 100%</th><th colspan="1">Domingo</th><th colspan="1">H.E. Domingo</th><th colspan="3" id="adminHaberesGroupTh">Haberes</th>
             </tr>
-            <tr class="cols">
+            <tr class="cols" id="adminColsRow">
               <th>Ausenc.</th><th>Licencia</th><th>Días trab.</th><th>Anticipo</th><th>Aguinaldo</th>
               <th>Cant.</th><th>Cant.</th><th>Cant.</th><th>Cant.</th>
               <th>Bono desemp.</th><th>Colación</th><th>Movilización</th>
@@ -390,6 +392,21 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   </div>
 </div>
 
+<div class="modal-bg" id="bonosModalBg">
+  <div class="modal">
+    <h3>Bonos adicionales</h3>
+    <p class="modal-hint">Estos bonos aparecen como columnas extra en la grilla del período. Puedes renombrarlos o quitarlos cuando quieras.</p>
+    <div id="bonosList" style="margin-bottom:16px;"></div>
+    <div class="row">
+      <input id="nuevoBonoNombre" type="text" class="grow" placeholder="Nombre del nuevo bono">
+      <button class="btn secondary" onclick="addConcepto()">Agregar</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeBonosModal()">Listo</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -411,7 +428,7 @@ const CAMPOS = [
   {key:'bono_desempeno',label:' BONO DESEMPEÑO'},{key:'colacion',label:' COLACION'},{key:'movilizacion',label:' MOVILIZACION'},
 ];
 
-let CURRENT = { role:null, empresa:null, trabajadores:[], adminEmpresas:[], adminSel:null };
+let CURRENT = { role:null, empresa:null, trabajadores:[], conceptos:[], adminEmpresas:[], adminSel:null };
 
 /* ---------------- apariencia ---------------- */
 function hexToRgb(hex){
@@ -689,6 +706,75 @@ function buildPeriodoSelectors(){
   anioSel.innerHTML = opts; anioSel.value = y;
 }
 let CURRENT_PERIODO = null;
+let CURRENT_ENTRIES_BY_WORKER = {};
+
+async function fetchConceptos(empresaId){
+  const { data, error } = await sb.from('conceptos').select('*').eq('empresa_id', empresaId).eq('activo', true).order('orden').order('created_at');
+  if(error) throw error;
+  return data;
+}
+function renderConceptoHeaders(prefix, conceptos){
+  const groupTh = document.getElementById(prefix+'HaberesGroupTh');
+  if(groupTh) groupTh.colSpan = 3 + conceptos.length;
+  const colsRow = document.getElementById(prefix+'ColsRow');
+  if(colsRow){
+    colsRow.querySelectorAll('.concepto-th').forEach(el=>el.remove());
+    conceptos.forEach(c=>{
+      const th = document.createElement('th');
+      th.textContent = c.nombre;
+      th.className = 'concepto-th';
+      colsRow.appendChild(th);
+    });
+  }
+}
+async function openBonosModal(){
+  document.getElementById('bonosModalBg').classList.add('active');
+  await renderBonosList();
+}
+function closeBonosModal(){
+  closeModal('bonosModalBg');
+  loadPeriodo();
+}
+async function renderBonosList(){
+  const el = document.getElementById('bonosList');
+  el.innerHTML = CURRENT.conceptos.length ? CURRENT.conceptos.map(c=>`
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <input type="text" value="${escapeHtml(c.nombre)}" class="grow" onchange="renameConcepto('${c.id}', this.value)">
+      <button class="btn ghost" onclick="deleteConcepto('${c.id}')">Quitar</button>
+    </div>`).join('') : '<p class="section-hint">Todavía no tienes bonos adicionales.</p>';
+}
+async function addConcepto(){
+  const nombre = document.getElementById('nuevoBonoNombre').value.trim();
+  if(!nombre) return;
+  try{
+    const { error } = await sb.from('conceptos').insert({empresa_id: CURRENT.empresa.id, nombre});
+    if(error) throw error;
+    document.getElementById('nuevoBonoNombre').value='';
+    CURRENT.conceptos = await fetchConceptos(CURRENT.empresa.id);
+    await renderBonosList();
+    showToast('Bono agregado');
+  }catch(e){ showToast('Error: '+e.message, true); }
+}
+async function renameConcepto(id, nombre){
+  nombre = nombre.trim(); if(!nombre) return;
+  try{
+    const { error } = await sb.from('conceptos').update({nombre}).eq('id', id);
+    if(error) throw error;
+    CURRENT.conceptos = await fetchConceptos(CURRENT.empresa.id);
+    showToast('Bono actualizado');
+  }catch(e){ showToast('Error: '+e.message, true); }
+}
+async function deleteConcepto(id){
+  if(!confirm('¿Quitar este bono de la grilla? Los datos ya ingresados no se borran.')) return;
+  try{
+    const { error } = await sb.from('conceptos').update({activo:false}).eq('id', id);
+    if(error) throw error;
+    CURRENT.conceptos = await fetchConceptos(CURRENT.empresa.id);
+    await renderBonosList();
+    showToast('Bono quitado');
+  }catch(e){ showToast('Error: '+e.message, true); }
+}
+
 async function loadPeriodo(){
   const workers = activeWorkers();
   const emptyEl = document.getElementById('periodoEmptyState');
@@ -698,6 +784,8 @@ async function loadPeriodo(){
   emptyEl.style.display='none'; loadingEl.style.display=''; contentEl.style.display='none';
   const anio = Number(document.getElementById('periodoAnio').value), mes = Number(document.getElementById('periodoMes').value);
   try{
+    CURRENT.conceptos = await fetchConceptos(CURRENT.empresa.id);
+    renderConceptoHeaders('periodo', CURRENT.conceptos);
     let { data: per, error } = await sb.from('periodos').select('*').eq('empresa_id', CURRENT.empresa.id).eq('anio',anio).eq('mes',mes).maybeSingle();
     if(error) throw error;
     if(!per){
@@ -710,6 +798,7 @@ async function loadPeriodo(){
     const { data: entries, error: e2 } = await sb.from('entries').select('*').eq('periodo_id', per.id);
     if(e2) throw e2;
     const byWorker = {}; entries.forEach(e=>byWorker[e.trabajador_id]=e);
+    CURRENT_ENTRIES_BY_WORKER = byWorker;
     const tbody = document.getElementById('periodoTbody');
     tbody.innerHTML = workers.map(w=>{
       const e = byWorker[w.id] || {};
@@ -717,7 +806,12 @@ async function loadPeriodo(){
         const val = (e[c.key]!==undefined && e[c.key]!==null) ? e[c.key] : (c.key==='dias_trabajados' ? 30 : 0);
         return `<td><input type="number" step="any" data-worker="${w.id}" data-field="${c.key}" value="${val}" onchange="onCellChange(this)"></td>`;
       }).join('');
-      return `<tr><td class="name-cell"><div class="nm">${escapeHtml(fullName(w))}</div><div class="rt">${escapeHtml(w.rut)}</div></td>${inputs}</tr>`;
+      const extras = e.extras || {};
+      const conceptoCells = CURRENT.conceptos.map(c=>{
+        const val = extras[c.id]!=null ? extras[c.id] : 0;
+        return `<td><input type="number" step="any" data-worker="${w.id}" data-concepto="${c.id}" value="${val}" onchange="onConceptoChange(this)"></td>`;
+      }).join('');
+      return `<tr><td class="name-cell"><div class="nm">${escapeHtml(fullName(w))}</div><div class="rt">${escapeHtml(w.rut)}</div></td>${inputs}${conceptoCells}</tr>`;
     }).join('');
     renderPeriodoTotals(workers, byWorker);
     contentEl.style.display=''; loadingEl.style.display='none';
@@ -733,22 +827,46 @@ async function onCellChange(el){
     const patch = {}; patch[field]=v;
     const { error } = await sb.from('entries').upsert({periodo_id: CURRENT_PERIODO.id, trabajador_id: workerId, ...patch}, {onConflict:'periodo_id,trabajador_id'});
     if(error) throw error;
+    if(!CURRENT_ENTRIES_BY_WORKER[workerId]) CURRENT_ENTRIES_BY_WORKER[workerId] = {};
+    CURRENT_ENTRIES_BY_WORKER[workerId][field] = v;
+  }catch(e){ showToast('Error guardando: '+e.message, true); }
+  recomputeTotalsFromDOM();
+}
+async function onConceptoChange(el){
+  const workerId = el.dataset.worker, conceptoId = el.dataset.concepto;
+  const v = el.value===''?0:Number(el.value);
+  try{
+    const current = CURRENT_ENTRIES_BY_WORKER[workerId] || {};
+    const extras = Object.assign({}, current.extras||{});
+    extras[conceptoId] = v;
+    const { error } = await sb.from('entries').upsert({periodo_id: CURRENT_PERIODO.id, trabajador_id: workerId, extras}, {onConflict:'periodo_id,trabajador_id'});
+    if(error) throw error;
+    if(!CURRENT_ENTRIES_BY_WORKER[workerId]) CURRENT_ENTRIES_BY_WORKER[workerId] = {};
+    CURRENT_ENTRIES_BY_WORKER[workerId].extras = extras;
   }catch(e){ showToast('Error guardando: '+e.message, true); }
   recomputeTotalsFromDOM();
 }
 function recomputeTotalsFromDOM(){
   const sums = {}; CAMPOS.forEach(c=>sums[c.key]=0);
+  const conceptoSums = {}; CURRENT.conceptos.forEach(c=>conceptoSums[c.id]=0);
   document.querySelectorAll('#periodoTbody input').forEach(inp=>{
-    sums[inp.dataset.field] += Number(inp.value)||0;
+    if(inp.dataset.field) sums[inp.dataset.field] += Number(inp.value)||0;
+    else if(inp.dataset.concepto) conceptoSums[inp.dataset.concepto] += Number(inp.value)||0;
   });
   const row = document.getElementById('periodoTotals');
   const n = document.querySelectorAll('#periodoTbody tr').length;
-  row.innerHTML = `<td class="name-cell">Totales (${n})</td>` + CAMPOS.map(c=>`<td>${formatNum(sums[c.key])}</td>`).join('');
+  row.innerHTML = `<td class="name-cell">Totales (${n})</td>` + CAMPOS.map(c=>`<td>${formatNum(sums[c.key])}</td>`).join('') + CURRENT.conceptos.map(c=>`<td>${formatNum(conceptoSums[c.id])}</td>`).join('');
 }
 function renderPeriodoTotals(workers, byWorker){
   const sums = {}; CAMPOS.forEach(c=>sums[c.key]=0);
-  workers.forEach(w=>{ const e=byWorker[w.id]||{}; CAMPOS.forEach(c=>{ if(typeof e[c.key]==='number') sums[c.key]+=e[c.key]; }); });
-  document.getElementById('periodoTotals').innerHTML = `<td class="name-cell">Totales (${workers.length})</td>` + CAMPOS.map(c=>`<td>${formatNum(sums[c.key])}</td>`).join('');
+  const conceptoSums = {}; CURRENT.conceptos.forEach(c=>conceptoSums[c.id]=0);
+  workers.forEach(w=>{
+    const e=byWorker[w.id]||{};
+    CAMPOS.forEach(c=>{ if(typeof e[c.key]==='number') sums[c.key]+=e[c.key]; });
+    const extras = e.extras||{};
+    CURRENT.conceptos.forEach(c=>{ if(typeof extras[c.id]==='number') conceptoSums[c.id]+=extras[c.id]; });
+  });
+  document.getElementById('periodoTotals').innerHTML = `<td class="name-cell">Totales (${workers.length})</td>` + CAMPOS.map(c=>`<td>${formatNum(sums[c.key])}</td>`).join('') + CURRENT.conceptos.map(c=>`<td>${formatNum(conceptoSums[c.id])}</td>`).join('');
 }
 async function savePeriodoMeta(){
   try{
@@ -760,20 +878,23 @@ async function savePeriodoMeta(){
   }catch(e){ showToast('Error: '+e.message, true); }
 }
 
-function buildExportRows(workers, entriesByWorker, anio, mes){
+function buildExportRows(workers, entriesByWorker, anio, mes, conceptos){
+  conceptos = conceptos || [];
   const headerCols = ['AÑO','MES','CODIGO','RUT ','NOMBRE ','AP PATERNO ','AP MATERNO ','CARGO ','CENTRO COSTO ',
     'AUSENCIAS ','LICENCIA ',' DIAS TRABAJADOS','ANTICIPO','AGUINALDO',
     'CANT HRS.EXTRA 50% ','VALOR HRS.EXTRA 50%',' CANT HRS.EXTRA 100%',' VALOR HRS.EXTRA 100%',
     ' CANT HRS DOMINGO',' VALOR HRS DOMINGO',' CANT HRS EXTRA DMNGO.',' VALOR HRS EXTRA DMNGO.',
-    ' BONO DESEMPEÑO',' COLACION',' MOVILIZACION','VIATICO'];
+    ' BONO DESEMPEÑO',' COLACION',' MOVILIZACION','VIATICO', ...conceptos.map(c=>c.nombre)];
   const rows = workers.map(w=>{
     const e = entriesByWorker[w.id] || {};
     const g = (k)=> e[k]!=null ? Number(e[k]) : 0;
+    const extras = e.extras || {};
+    const conceptoVals = conceptos.map(c=> extras[c.id]!=null ? Number(extras[c.id]) : 0);
     return [Number(anio), Number(mes), w.codigo||'', w.rut, w.nombre, w.ap_paterno, w.ap_materno||'', w.cargo||'', w.centro_costo||'',
       g('ausencias'), g('licencia'), g('dias_trabajados'), g('anticipo'), g('aguinaldo'),
       g('cant_he_50'), g('valor_he_50'), g('cant_he_100'), g('valor_he_100'),
       g('cant_hd'), g('valor_hd'), g('cant_hed'), g('valor_hed'),
-      g('bono_desempeno'), g('colacion'), g('movilizacion'), 0];
+      g('bono_desempeno'), g('colacion'), g('movilizacion'), 0, ...conceptoVals];
   });
   return {headerCols, rows};
 }
@@ -795,7 +916,7 @@ async function exportarPeriodo(){
     const { data: entries, error } = await sb.from('entries').select('*').eq('periodo_id', CURRENT_PERIODO.id);
     if(error) throw error;
     const byWorker = {}; entries.forEach(e=>byWorker[e.trabajador_id]=e);
-    const {headerCols, rows} = buildExportRows(workers, byWorker, anio, mes);
+    const {headerCols, rows} = buildExportRows(workers, byWorker, anio, mes, CURRENT.conceptos);
     doExportXlsx(CURRENT.empresa, anio, mes, headerCols, rows);
     showToast('Excel exportado');
   }catch(e){ showToast('Error exportando: '+e.message, true); }
@@ -931,12 +1052,15 @@ function closeAdminDetail(){
   document.getElementById('adminDetailView').style.display='none';
 }
 let ADMIN_CACHE = null;
+let ADMIN_CONCEPTOS = [];
 async function loadAdminPeriodo(){
   const emp = CURRENT.adminSel;
   const anio = Number(document.getElementById('adminAnio').value), mes = Number(document.getElementById('adminMes').value);
   const loading = document.getElementById('adminGridLoading'), wrap = document.getElementById('adminGridWrap'), empty = document.getElementById('adminGridEmpty');
   loading.style.display=''; wrap.style.display='none'; empty.style.display='none';
   try{
+    ADMIN_CONCEPTOS = await fetchConceptos(emp.id);
+    renderConceptoHeaders('admin', ADMIN_CONCEPTOS);
     const { data: workers, error: e1 } = await sb.from('trabajadores').select('*').eq('empresa_id', emp.id).eq('activo', true).order('nombre');
     if(e1) throw e1;
     const { data: per, error: e2 } = await sb.from('periodos').select('*').eq('empresa_id', emp.id).eq('anio',anio).eq('mes',mes).maybeSingle();
@@ -951,17 +1075,25 @@ async function loadAdminPeriodo(){
     tbody.innerHTML = workers.map(w=>{
       const e = byWorker[w.id]||{};
       const cells = CAMPOS.map(c=>`<td><input type="number" value="${e[c.key]!=null?e[c.key]:0}" disabled></td>`).join('');
-      return `<tr><td class="name-cell"><div class="nm">${escapeHtml(fullName(w))}</div><div class="rt">${escapeHtml(w.rut)}</div></td>${cells}</tr>`;
+      const extras = e.extras||{};
+      const conceptoCells = ADMIN_CONCEPTOS.map(c=>`<td><input type="number" value="${extras[c.id]!=null?extras[c.id]:0}" disabled></td>`).join('');
+      return `<tr><td class="name-cell"><div class="nm">${escapeHtml(fullName(w))}</div><div class="rt">${escapeHtml(w.rut)}</div></td>${cells}${conceptoCells}</tr>`;
     }).join('');
     const sums={}; CAMPOS.forEach(c=>sums[c.key]=0);
-    workers.forEach(w=>{ const e=byWorker[w.id]||{}; CAMPOS.forEach(c=>{ if(typeof e[c.key]==='number') sums[c.key]+=e[c.key]; }); });
-    document.getElementById('adminGridTotals').innerHTML = `<td class="name-cell">Totales (${workers.length})</td>` + CAMPOS.map(c=>`<td>${formatNum(sums[c.key])}</td>`).join('');
+    const conceptoSums={}; ADMIN_CONCEPTOS.forEach(c=>conceptoSums[c.id]=0);
+    workers.forEach(w=>{
+      const e=byWorker[w.id]||{};
+      CAMPOS.forEach(c=>{ if(typeof e[c.key]==='number') sums[c.key]+=e[c.key]; });
+      const extras=e.extras||{};
+      ADMIN_CONCEPTOS.forEach(c=>{ if(typeof extras[c.id]==='number') conceptoSums[c.id]+=extras[c.id]; });
+    });
+    document.getElementById('adminGridTotals').innerHTML = `<td class="name-cell">Totales (${workers.length})</td>` + CAMPOS.map(c=>`<td>${formatNum(sums[c.key])}</td>`).join('') + ADMIN_CONCEPTOS.map(c=>`<td>${formatNum(conceptoSums[c.id])}</td>`).join('');
     wrap.style.display='';
   }catch(e){ loading.style.display='none'; showToast('Error: '+e.message, true); }
 }
 function exportarAdminPeriodo(){
   if(!ADMIN_CACHE){ showToast('No hay datos para exportar en este período', true); return; }
-  const {headerCols, rows} = buildExportRows(ADMIN_CACHE.workers, ADMIN_CACHE.byWorker, ADMIN_CACHE.anio, ADMIN_CACHE.mes);
+  const {headerCols, rows} = buildExportRows(ADMIN_CACHE.workers, ADMIN_CACHE.byWorker, ADMIN_CACHE.anio, ADMIN_CACHE.mes, ADMIN_CONCEPTOS);
   doExportXlsx(CURRENT.adminSel, ADMIN_CACHE.anio, ADMIN_CACHE.mes, headerCols, rows);
   showToast('Excel exportado');
 }
