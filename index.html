@@ -183,7 +183,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 <div id="app" style="display:none;">
   <header class="topbar">
     <div class="brand"><span class="mark"></span><h1>Control Mensual RRHH</h1><span class="sub" id="companyMono"></span></div>
-    <div class="company-chip"><span id="companyLabel"></span><button onclick="doLogout()">Cerrar sesión</button></div>
+    <div class="company-chip"><span id="companyLabel"></span><button onclick="openThemeModal()">Apariencia</button><button onclick="doLogout()">Cerrar sesión</button></div>
   </header>
   <nav class="tabs">
     <button data-view="periodo" class="active" onclick="switchTab('periodo')">Período actual</button>
@@ -275,12 +275,14 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 <div id="adminApp" style="display:none;">
   <header class="topbar">
     <div class="brand"><span class="mark"></span><h1>Control Mensual RRHH</h1><span class="sub">Panel administrador</span></div>
-    <div class="company-chip"><span id="adminEmailLabel"></span><button onclick="doLogout()">Cerrar sesión</button></div>
+    <div class="company-chip"><span id="adminEmailLabel"></span><button onclick="openThemeModal()">Apariencia</button><button onclick="doLogout()">Cerrar sesión</button></div>
   </header>
   <main>
     <div id="adminListView">
-      <h2 class="section-title">Empresas</h2>
-      <p class="section-hint">Selecciona una empresa para ver su nómina y sus períodos.</p>
+      <div class="toolbar">
+        <div><h2 class="section-title">Empresas</h2><p class="section-hint">Selecciona una empresa para ver su nómina y sus períodos.</p></div>
+        <button class="btn" onclick="openEmpresaModal(null)">+ Nueva empresa</button>
+      </div>
       <div id="adminLoading" class="loading">Cargando…</div>
       <div id="adminEmpresasList" class="company-list"></div>
     </div>
@@ -344,6 +346,50 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
   </div>
 </div>
 
+<div class="modal-bg" id="themeModalBg">
+  <div class="modal">
+    <h3>Apariencia</h3>
+    <p class="modal-hint">Cambia el color de fondo y el acento a tu gusto.</p>
+    <div class="field">
+      <label>Modo</label>
+      <div class="access-tabs" style="margin-bottom:0;">
+        <button id="themeModeDark" onclick="setThemeMode('dark')">Oscuro</button>
+        <button id="themeModeLight" onclick="setThemeMode('light')">Claro</button>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px;">
+      <label>Color de acento</label>
+      <input type="color" id="themeAccentInput" onchange="setThemeAccent(this.value)" style="height:38px; padding:4px; cursor:pointer;">
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('themeModalBg')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="empresaModalBg">
+  <div class="modal">
+    <h3 id="empresaModalTitle">Nueva empresa</h3>
+    <p class="modal-hint">El código de acceso es lo que le entregas al encargado de RRHH.</p>
+    <input type="hidden" id="empresaModalId">
+    <div class="field"><label>Razón social *</label><input id="empNombre" type="text"></div>
+    <div class="field"><label>RUT empresa *</label><input id="empRut" type="text" placeholder="76.077.913-K"></div>
+    <div class="field"><label>Encargado de RRHH</label><input id="empEncargado" type="text"></div>
+    <div class="field">
+      <label>Código de acceso *</label>
+      <div class="row" style="align-items:stretch;">
+        <input id="empCodigo" type="text" class="grow" placeholder="ej: nut-8k2m9x">
+        <button class="btn secondary" onclick="generarCodigo()">Generar</button>
+      </div>
+    </div>
+    <p class="err-msg" id="errEmpresaModal"></p>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('empresaModalBg')">Cancelar</button>
+      <button class="btn" onclick="saveEmpresa()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -366,6 +412,56 @@ const CAMPOS = [
 ];
 
 let CURRENT = { role:null, empresa:null, trabajadores:[], adminEmpresas:[], adminSel:null };
+
+/* ---------------- apariencia ---------------- */
+function hexToRgb(hex){
+  const h = hex.replace('#','');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+function relLuminance(r,g,b){
+  const a=[r,g,b].map(v=>{ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); });
+  return 0.2126*a[0]+0.7152*a[1]+0.0722*a[2];
+}
+function mixHex(hex, targetHex, amt){
+  const [r1,g1,b1]=hexToRgb(hex), [r2,g2,b2]=hexToRgb(targetHex);
+  const mix=(a,b)=>Math.round(a+(b-a)*amt);
+  return '#'+[mix(r1,r2),mix(g1,g2),mix(b1,b2)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+function loadThemePref(){
+  try{ const t = JSON.parse(localStorage.getItem('rrhh_theme')); if(t && t.mode && t.accent) return t; }catch(e){}
+  return { mode:'dark', accent:'#8fae3f' };
+}
+function saveThemePref(){ try{ localStorage.setItem('rrhh_theme', JSON.stringify(THEME)); }catch(e){} }
+let THEME = loadThemePref();
+function applyTheme(){
+  const s = document.documentElement.style;
+  if(THEME.mode==='light'){
+    s.setProperty('--bg','#f4f5f1'); s.setProperty('--bg-panel','#ffffff'); s.setProperty('--bg-panel-2','#ecefe7');
+    s.setProperty('--line','#dde1d6'); s.setProperty('--line-soft','#e7eae1');
+    s.setProperty('--ink','#1c221d'); s.setProperty('--ink-dim','#4d5749'); s.setProperty('--ink-faint','#8a9284');
+  } else {
+    s.setProperty('--bg','#14181a'); s.setProperty('--bg-panel','#1c2226'); s.setProperty('--bg-panel-2','#232a2f');
+    s.setProperty('--line','#2e3639'); s.setProperty('--line-soft','#252c30');
+    s.setProperty('--ink','#e7ece9'); s.setProperty('--ink-dim','#93a19c'); s.setProperty('--ink-faint','#5d6b67');
+  }
+  const accent = THEME.accent || '#8fae3f';
+  s.setProperty('--accent', accent);
+  s.setProperty('--accent-dim', mixHex(accent,'#000000',0.35));
+  const [r,g,b] = hexToRgb(accent);
+  s.setProperty('--accent-ink', relLuminance(r,g,b) > 0.45 ? '#101410' : '#f4f7f1');
+}
+applyTheme();
+function openThemeModal(){
+  document.getElementById('themeAccentInput').value = THEME.accent;
+  updateThemeModeButtons();
+  document.getElementById('themeModalBg').classList.add('active');
+}
+function updateThemeModeButtons(){
+  document.getElementById('themeModeDark').classList.toggle('active', THEME.mode==='dark');
+  document.getElementById('themeModeLight').classList.toggle('active', THEME.mode==='light');
+}
+function setThemeMode(m){ THEME.mode=m; applyTheme(); saveThemePref(); updateThemeModeButtons(); }
+function setThemeAccent(hex){ THEME.accent=hex; applyTheme(); saveThemePref(); }
 
 function showToast(msg, isErr){
   const t = document.getElementById('toast');
@@ -756,9 +852,64 @@ async function enterAdmin(email){
     list.innerHTML = data.map(emp=>`
       <div class="company-row" onclick="openAdminDetail('${emp.id}')">
         <div><div class="nm">${escapeHtml(emp.nombre)}</div><div class="meta">${escapeHtml(emp.rut)} ${emp.encargado?'· '+escapeHtml(emp.encargado):''}</div></div>
-        <div class="meta">código: ${escapeHtml(emp.codigo_acceso)}</div>
+        <div class="row" style="align-items:center;">
+          <span class="meta">código: ${escapeHtml(emp.codigo_acceso)}</span>
+          <button class="btn ghost" onclick="event.stopPropagation(); openEmpresaModal('${emp.id}')">Editar</button>
+        </div>
       </div>`).join('');
   }catch(e){ loading.style.display='none'; showToast('Error: '+e.message, true); }
+}
+function generarCodigo(){
+  const nombre = document.getElementById('empNombre').value.trim();
+  const base = (nombre||'emp').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'').slice(0,6) || 'emp';
+  document.getElementById('empCodigo').value = base + '-' + Math.random().toString(36).slice(2,8);
+}
+function openEmpresaModal(id){
+  document.getElementById('empresaModalId').value = id||'';
+  document.getElementById('errEmpresaModal').style.display='none';
+  if(id){
+    const emp = CURRENT.adminEmpresas.find(e=>e.id===id);
+    document.getElementById('empresaModalTitle').textContent='Editar empresa';
+    document.getElementById('empNombre').value = emp.nombre;
+    document.getElementById('empRut').value = emp.rut;
+    document.getElementById('empEncargado').value = emp.encargado||'';
+    document.getElementById('empCodigo').value = emp.codigo_acceso;
+  }else{
+    document.getElementById('empresaModalTitle').textContent='Nueva empresa';
+    ['empNombre','empRut','empEncargado','empCodigo'].forEach(f=>document.getElementById(f).value='');
+  }
+  document.getElementById('empresaModalBg').classList.add('active');
+}
+async function saveEmpresa(){
+  const id = document.getElementById('empresaModalId').value;
+  const errEl = document.getElementById('errEmpresaModal');
+  errEl.style.display='none';
+  const rec = {
+    nombre: document.getElementById('empNombre').value.trim(),
+    rut: document.getElementById('empRut').value.trim(),
+    encargado: document.getElementById('empEncargado').value.trim(),
+    codigo_acceso: document.getElementById('empCodigo').value.trim(),
+  };
+  if(!rec.nombre || !rec.rut || !rec.codigo_acceso){
+    errEl.textContent='Completa razón social, RUT y código de acceso'; errEl.style.display=''; return;
+  }
+  try{
+    if(id){
+      const { error } = await sb.from('empresas').update(rec).eq('id', id);
+      if(error) throw error;
+    }else{
+      const { error } = await sb.from('empresas').insert(rec);
+      if(error) throw error;
+    }
+    closeModal('empresaModalBg');
+    await enterAdmin(document.getElementById('adminEmailLabel').textContent);
+    showToast('Empresa guardada');
+  }catch(e){
+    errEl.textContent = e.message && e.message.includes('duplicate') ? 'Ese código de acceso ya está en uso' : ('Error: '+e.message);
+    errEl.style.display='';
+  }
 }
 async function openAdminDetail(empresaId){
   const emp = CURRENT.adminEmpresas.find(e=>e.id===empresaId);
