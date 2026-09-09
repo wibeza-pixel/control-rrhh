@@ -211,12 +211,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
             <thead>
               <tr class="group">
                 <th class="name-head" rowspan="2"></th>
-                <th colspan="3">Asistencia</th><th colspan="2">Anticipos</th><th colspan="2">H.E. 50%</th>
-                <th colspan="2">H.E. 100%</th><th colspan="2">Domingo</th><th colspan="2">H.E. Domingo</th><th colspan="3">Haberes</th>
+                <th colspan="3">Asistencia</th><th colspan="2">Anticipos</th><th colspan="1">H.E. 50%</th>
+                <th colspan="1">H.E. 100%</th><th colspan="1">Domingo</th><th colspan="1">H.E. Domingo</th><th colspan="3">Haberes</th>
               </tr>
               <tr class="cols">
                 <th>Ausenc.</th><th>Licencia</th><th>Días trab.</th><th>Anticipo</th><th>Aguinaldo</th>
-                <th>Cant.</th><th>Valor</th><th>Cant.</th><th>Valor</th><th>Cant.</th><th>Valor</th><th>Cant.</th><th>Valor</th>
+                <th>Cant.</th><th>Cant.</th><th>Cant.</th><th>Cant.</th>
                 <th>Bono desemp.</th><th>Colación</th><th>Movilización</th>
               </tr>
             </thead>
@@ -302,12 +302,12 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
           <thead>
             <tr class="group">
               <th class="name-head" rowspan="2"></th>
-              <th colspan="3">Asistencia</th><th colspan="2">Anticipos</th><th colspan="2">H.E. 50%</th>
-              <th colspan="2">H.E. 100%</th><th colspan="2">Domingo</th><th colspan="2">H.E. Domingo</th><th colspan="3">Haberes</th>
+              <th colspan="3">Asistencia</th><th colspan="2">Anticipos</th><th colspan="1">H.E. 50%</th>
+              <th colspan="1">H.E. 100%</th><th colspan="1">Domingo</th><th colspan="1">H.E. Domingo</th><th colspan="3">Haberes</th>
             </tr>
             <tr class="cols">
               <th>Ausenc.</th><th>Licencia</th><th>Días trab.</th><th>Anticipo</th><th>Aguinaldo</th>
-              <th>Cant.</th><th>Valor</th><th>Cant.</th><th>Valor</th><th>Cant.</th><th>Valor</th><th>Cant.</th><th>Valor</th>
+              <th>Cant.</th><th>Cant.</th><th>Cant.</th><th>Cant.</th>
               <th>Bono desemp.</th><th>Colación</th><th>Movilización</th>
             </tr>
           </thead>
@@ -404,10 +404,10 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 const CAMPOS = [
   {key:'ausencias',label:'AUSENCIAS'},{key:'licencia',label:'LICENCIA'},{key:'dias_trabajados',label:' DIAS TRABAJADOS'},
   {key:'anticipo',label:'ANTICIPO'},{key:'aguinaldo',label:'AGUINALDO'},
-  {key:'cant_he_50',label:'CANT HRS.EXTRA 50% '},{key:'valor_he_50',label:'VALOR HRS.EXTRA 50%'},
-  {key:'cant_he_100',label:' CANT HRS.EXTRA 100%'},{key:'valor_he_100',label:' VALOR HRS.EXTRA 100%'},
-  {key:'cant_hd',label:' CANT HRS DOMINGO'},{key:'valor_hd',label:' VALOR HRS DOMINGO'},
-  {key:'cant_hed',label:' CANT HRS EXTRA DMNGO.'},{key:'valor_hed',label:' VALOR HRS EXTRA DMNGO.'},
+  {key:'cant_he_50',label:'CANT HRS.EXTRA 50% '},
+  {key:'cant_he_100',label:' CANT HRS.EXTRA 100%'},
+  {key:'cant_hd',label:' CANT HRS DOMINGO'},
+  {key:'cant_hed',label:' CANT HRS EXTRA DMNGO.'},
   {key:'bono_desempeno',label:' BONO DESEMPEÑO'},{key:'colacion',label:' COLACION'},{key:'movilizacion',label:' MOVILIZACION'},
 ];
 
